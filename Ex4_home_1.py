@@ -54,6 +54,8 @@ test_loader = torch.utils.data.DataLoader(test_set, batch_size=4,
 
 classes = ("Cat", "Dog")
 
+criterion = nn.CrossEntropyLoss()
+
 
 # # Creating a CNN-based image classifier.
 class ImageClassifier(nn.Module):
@@ -184,7 +186,7 @@ def train(model: torch.nn.Module,
                                            loss_fn=loss_fn,
                                            optimizer=optimizer)
         test_loss, test_acc = test_step(model=model,
-                                        dataloader=test_dataloader,
+                                        dataloader=train_dataloader,
                                         loss_fn=loss_fn)
 
         # 4. Print out what's happening
@@ -211,7 +213,7 @@ torch.manual_seed(42)
 torch.cuda.manual_seed(42)
 
 # Set number of epochs
-NUM_EPOCHS = 25
+NUM_EPOCHS = 10
 
 # Instantiate a model  object
 model = ImageClassifier().to(device)
