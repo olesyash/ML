@@ -7,6 +7,7 @@ import math
 import os
 
 import torch
+import torchvision
 
 from torch.utils.data import ConcatDataset
 from torchvision import datasets, transforms
@@ -210,15 +211,14 @@ def my_plot(epochs, loss):
     plt.plot(epochs, loss)
 
 
-def test(model, batch_size=32, show=False):
+def test(model, batch_size=32, now="1", show=True):
     running_loss = 0.0
     running_corrects = 0
     test_loader = torch.utils.data.DataLoader(test_set, batch_size=batch_size,
                                               shuffle=True, num_workers=0)
-    if show:
-        j = 0
-        fig, axs = plt.subplots(math.ceil(len(test_set) / batch_size) * 2, batch_size, figsize=(100, 100))
+    counter = 0
     for inputs, labels in test_loader:
+        counter += 1
         inputs = inputs.to(device)
         labels = labels.to(device)
         with torch.no_grad():
@@ -229,12 +229,16 @@ def test(model, batch_size=32, show=False):
             running_corrects += torch.sum(preds == labels.data)
 
         if show:
-            for i, img in enumerate(inputs):
-                ax = axs[j, i]
-                ax.axis('off')
-                ax.set_title("cat" if preds[i] == 0 else "dog")
-                ax.imshow(imshow(img))
-            j += 2
+            # Check for misclassified images
+            for i in range(len(labels)):
+                if preds[i] != labels[i]:
+                    img = inputs[i].cpu()  # Move the image back to CPU
+                    # Convert the tensor image to PIL image and save it
+                    img_pil = transforms.ToPILImage()(img)
+
+                    dir_name = os.path.join(PATH, f"misclassified_{now}")
+                    os.makedirs(dir_name, exist_ok=True)
+                    img_pil.save(os.path.join(dir_name, f"{classes[labels[i]]}_{counter}_{i}.png"))
 
     epoch_loss = running_loss / len(test_set)
     print(f"Running_corrects: {running_corrects}")
@@ -243,8 +247,7 @@ def test(model, batch_size=32, show=False):
     print('Epoch {} loss: {:.4f}, acc: {:.4f} %'.format("test",
                                                         epoch_loss,
                                                         epoch_acc * 100))
-    if show:
-        plt.show()
+
     return epoch_acc
 
 
@@ -279,7 +282,7 @@ def run(model, batch_size, lr_rate, optimizer, augmentation, num_epochs):
     plt.title("Accuracy function")
     my_plot(np.linspace(1, num_epochs, num_epochs).astype(int), accurancies)
     plt.savefig(acc_fig_name)
-    accurancy = test(model=net, batch_size=batch_size)
+    accurancy = test(model=net, batch_size=batch_size, now=dt_string)
     end_time = timer()
     print(f"Total run time: {end_time - start_time:.3f} seconds")
     return accurancy
@@ -300,37 +303,39 @@ if __name__ == '__main__':
     torch.manual_seed(42)
     torch.cuda.manual_seed(42)
     batch_size = 4
-    lr_rates = [0.0001, 0.00001, 0.000001]
-    optimizers = [ADAM, SGD]
-    augmentations = [True]
+
     now = datetime.datetime.now()
     dt_string = now.strftime("%d_%m_%Y_%H_%M")
     title = ["model", "batch_size", "learning_rate", "optimizer", "augmentation", "epochs", "accurancy"]
     data = []
     models = [Model1(), Model2(), Model3()]
-    for m in models:
-        visualize_model(m, batch_size)
+    # for m in models:
+    #     visualize_model(m, batch_size)
 
+    models = ["model1", "model2", "model3"]
     num_epochs = [40, 80]
-    # for model in models:
-    #     for lr_rate in lr_rates:
-    #         for optimizer in optimizers:
-    #             for augmentation in augmentations:
-    #                 for num_epoch in num_epochs:
-    #                     try:
-    #                         accurancy = run(model, batch_size, lr_rate, optimizer, augmentation, num_epoch)
-    #                     except:
-    #                         accurancy = 0
-    #                     print(f"Test accurancy {accurancy}")
-    #                     data.append([model, batch_size, lr_rate, optimizer, augmentation, num_epoch, accurancy])
-    model = "model3"
-    lr_rate = 0.001
-    optimizer = ADAM
-    augmentation = True
-    num_epoch = 1
-    accurancy = run(model, batch_size, lr_rate, optimizer, augmentation, num_epoch)
+    lr_rates = [0.001, 0.0001]
+    optimizers = [ADAM, SGD]
+    augmentations = [True, False]
+    for model in models:
+        for lr_rate in lr_rates:
+            for optimizer in optimizers:
+                for augmentation in augmentations:
+                    for num_epoch in num_epochs:
+                        try:
+                            accurancy = run(model, batch_size, lr_rate, optimizer, augmentation, num_epoch)
+                        except:
+                            accurancy = 0
+
+                        print(f"Test accuracy {accurancy}")
+                        data.append([model, batch_size, lr_rate, optimizer, augmentation, num_epoch, accurancy])
+    # And the winner is: !!!
+    # model = "model3"
+    # lr_rate = 0.001
+    # optimizer = ADAM
+    # augmentation = True
+    # num_epoch = 80
+    # accurancy = run(model, batch_size, lr_rate, optimizer, augmentation, num_epoch)
+    # data.append([model, batch_size, lr_rate, optimizer, augmentation, num_epoch, accurancy])
     df = pd.DataFrame(data, columns=title, dtype=str)
-    data.append([model, batch_size, lr_rate, optimizer, augmentation, num_epoch, accurancy])
     df.to_csv(f"cnn_cats_and_dogs_{dt_string}.csv", index=False)
-
-
