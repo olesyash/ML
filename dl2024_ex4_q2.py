@@ -7,6 +7,7 @@ import os
 
 from torch import nn, optim
 import matplotlib.pyplot as plt
+from torch.utils.data import Subset
 from torchvision.models import resnet50, ResNet50_Weights
 from torchvision import transforms, datasets
 import numpy as np
@@ -65,11 +66,19 @@ optimizer = optim.Adam(model.fc.parameters())
 preprocess = weights.transforms()
 
 
-def train(batch_size=32, epochs=10):
+def train(batch_size=32, epochs=10, overfit=False, num_samples=4):
     losses = []
     accurancies = []
-    train_loader = torch.utils.data.DataLoader(train_set, batch_size=batch_size,
-                                               shuffle=True, num_workers=0)
+    if overfit:
+        indices = list(range(num_samples))
+        small_train_set = Subset(train_set, indices)
+        train_loader = torch.utils.data.DataLoader(
+            small_train_set, batch_size=num_samples
+        )
+    else:
+        train_loader = torch.utils.data.DataLoader(train_set, batch_size=batch_size,
+                                                   shuffle=True, num_workers=2)
+
     for epoch in range(epochs):  # loop over the dataset multiple times
         running_loss = 0.0
         running_corrects = 0
@@ -94,7 +103,7 @@ def train(batch_size=32, epochs=10):
 
         print('{} loss: {:.4f}, acc: {:.4f} %'.format("train",
                                                       epoch_loss,
-                                                      epoch_acc))
+                                                      epoch_acc * 100))
     return losses, accurancies
 
 
@@ -109,13 +118,19 @@ def my_plot(epochs, loss):
     plt.plot(epochs, loss)
 
 
-def test(batch_size=32, show=False):
+def test(batch_size=32, overfit=False, num_samples=4):
+    global test_set
     running_loss = 0.0
     running_corrects = 0
+
+    if overfit:
+        train_set = datasets.ImageFolder(os.path.join(PATH, "train"), transform=test_transform)
+        indices = list(range(num_samples))
+        test_set = Subset(train_set, indices)
+
     test_loader = torch.utils.data.DataLoader(test_set, batch_size=batch_size,
                                               shuffle=True, num_workers=0)
-    accurancies = []
-    losses = []
+
     for inputs, labels in test_loader:
         inputs = inputs.to(device)
         labels = labels.to(device)
@@ -128,11 +143,11 @@ def test(batch_size=32, show=False):
 
     epoch_loss = running_loss / len(test_set)
     print(f"Running_corrects: {running_corrects}")
-    epoch_acc = running_corrects.double() / len(test_set)
+    epoch_acc = running_corrects.double() / len(test_set) * 100
 
     print('Epoch {} loss: {:.4f}, acc: {:.4f} %'.format("test",
                                                         epoch_loss,
-                                                        epoch_acc * 100))
+                                                        epoch_acc))
 
     return epoch_acc
 
@@ -180,11 +195,27 @@ def crazy_loop(title):
     df.to_csv(f"res50_cats_and_dogs_{dt_string}.csv", index=False)
 
 
+def over_fit(batch_size, epoch):
+    """
+    Sanity check to see if the model can overfit the data
+    :param net:
+    :param batch_size:
+    :param epoch:
+    :return:
+    """
+    print(30 * "*")
+    print(f"Start overfit")
+    train(batch_size, epoch, overfit=True, num_samples=batch_size)
+    accuracy = test(batch_size, overfit=True, num_samples=batch_size)
+    print(f"Overfit accuracy {accuracy}")
+
+
 def main():
     title = ["model", "batch_size", "learning_rate", "optimizer", "augmentation", "epochs", "accuracy"]
     data = []
     batch_size = 32
     model = "Res50"
+    over_fit(batch_size, 10)
     # crazy_loop(title)
 
     combinations = [
