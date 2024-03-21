@@ -3,13 +3,11 @@
 CNN modules training to categorize cats and dogs pictures
 """
 import datetime
-import math
 import os
-
 import torch
-import torchvision
+import gc
 
-from torch.utils.data import ConcatDataset
+from torch.utils.data import ConcatDataset, Subset
 from torchvision import datasets, transforms
 import torch.optim as optim
 import torch.nn as nn
@@ -18,11 +16,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from timeit import default_timer as timer
-import gc
+
 from torchinfo import summary
 
 gc.collect()
-
 torch.cuda.empty_cache()
 
 # print(torch.cuda.is_available())
@@ -154,15 +151,25 @@ class Model3(nn.Module):
         return out
 
 
-def train(model, batch_size=32, epochs=10, optimizer_name=SGD, lr_rate=0.001, augmentation=True):
+def train(model, batch_size=32, epochs=10, optimizer_name=SGD, lr_rate=0.001, augmentation=True, overfit=False,
+          num_samples=4):
     losses = []
     accurancies = []
     if augmentation:
         train_set = datasets.ImageFolder(os.path.join(PATH, "train"), transform=transform)
     else:
         train_set = datasets.ImageFolder(os.path.join(PATH, "train"), transform=test_transform)
-    train_loader = torch.utils.data.DataLoader(train_set, batch_size=batch_size,
-                                               shuffle=True, num_workers=2)
+
+    if overfit:
+        indices = list(range(num_samples))
+        train_set = Subset(train_set, indices)
+        train_loader = torch.utils.data.DataLoader(
+            train_set, batch_size=num_samples
+        )
+    else:
+        train_loader = torch.utils.data.DataLoader(train_set, batch_size=batch_size,
+                                                   shuffle=True, num_workers=2)
+
     for epoch in range(epochs):  # loop over the dataset multiple times
         running_loss = 0.0
         running_corrects = 0
@@ -197,6 +204,8 @@ def train(model, batch_size=32, epochs=10, optimizer_name=SGD, lr_rate=0.001, au
         print('{} loss: {:.4f}, acc: {:.4f} %'.format("train",
                                                       epoch_loss,
                                                       epoch_acc * 100))
+        if overfit and epoch_acc == 1.0:
+            break
     return losses, accurancies
 
 
@@ -211,9 +220,14 @@ def my_plot(epochs, loss):
     plt.plot(epochs, loss)
 
 
-def test(model, batch_size=32, now="1", show=True):
+def test_model(model, batch_size=32, now="1", show=True, overfit=False, num_samples=2):
     running_loss = 0.0
     running_corrects = 0
+    if overfit:
+        train_set = datasets.ImageFolder(os.path.join(PATH, "train"), transform=test_transform)
+        indices = list(range(num_samples))
+        test_set = Subset(train_set, indices)
+
     test_loader = torch.utils.data.DataLoader(test_set, batch_size=batch_size,
                                               shuffle=True, num_workers=0)
     counter = 0
@@ -242,22 +256,37 @@ def test(model, batch_size=32, now="1", show=True):
 
     epoch_loss = running_loss / len(test_set)
     print(f"Running_corrects: {running_corrects}")
-    epoch_acc = running_corrects.double() / len(test_set)
+    epoch_acc = running_corrects.double() / len(test_set) * 100
 
     print('Epoch {} loss: {:.4f}, acc: {:.4f} %'.format("test",
                                                         epoch_loss,
-                                                        epoch_acc * 100))
+                                                        epoch_acc))
 
     return epoch_acc
 
 
-def run(model, batch_size, lr_rate, optimizer, augmentation, num_epochs):
-    if model == "model2":
+def set_model_to_device(model_name):
+    if model_name == "model2":
         net = Model2().to(device)
-    elif model == "model3":
+    elif model_name == "model3":
         net = Model3().to(device)
     else:
         net = Model1().to(device)
+    return net
+
+
+def run(model, batch_size, lr_rate, optimizer, augmentation, num_epochs):
+    """
+    Run the training and testing of the model and save accuracy and loss pictures
+    :param model:
+    :param batch_size:
+    :param lr_rate:
+    :param optimizer:
+    :param augmentation:
+    :param num_epochs:
+    :return:
+    """
+    net = set_model_to_device(model)
     fig_name = "{model}_loss_{now}.png"
     acc_fig_name = "{model}_acc_{now}.png"
     print(f"Start training model {model}, with batch size {batch_size}, with optimizer {optimizer}, "
@@ -282,14 +311,10 @@ def run(model, batch_size, lr_rate, optimizer, augmentation, num_epochs):
     plt.title("Accuracy function")
     my_plot(np.linspace(1, num_epochs, num_epochs).astype(int), accurancies)
     plt.savefig(acc_fig_name)
-    accurancy = test(model=net, batch_size=batch_size, now=dt_string)
+    accurancy = test_model(model=net, batch_size=batch_size, now=dt_string)
     end_time = timer()
     print(f"Total run time: {end_time - start_time:.3f} seconds")
     return accurancy
-
-
-def overfit():
-    pass
 
 
 def visualize_model(model, batch_size):
@@ -298,6 +323,11 @@ def visualize_model(model, batch_size):
 
 
 def crazy_loop(title):
+    """
+    Try to run all variations
+    :param title:
+    :return:
+    """
     data = []
     now = datetime.datetime.now()
     dt_string = now.strftime("%d_%m_%Y_%H_%M")
@@ -323,6 +353,22 @@ def crazy_loop(title):
     df.to_csv(f"cnn_cats_and_dogs_{dt_string}.csv", index=False)
 
 
+def over_fit(model_name, batch_size, epoch):
+    """
+    Sanity check to see if the model can overfit the data
+    :param net:
+    :param batch_size:
+    :param epoch:
+    :return:
+    """
+    print(30 * "*")
+    print(f"Start overfit on model {model_name}")
+    net = set_model_to_device(model_name)
+    train(net, batch_size, epoch, overfit=True, num_samples=batch_size, augmentation=False)
+    accuracy = test_model(net, batch_size, overfit=True, num_samples=batch_size)
+    print(f"Overfit accuracy {accuracy} for model {model_name}")
+
+
 if __name__ == '__main__':
     # Set random seeds
     start_time = timer()
@@ -335,9 +381,13 @@ if __name__ == '__main__':
     title = ["model", "batch_size", "learning_rate", "optimizer", "augmentation", "epochs", "accurancy"]
     data = []
     # Visualize models
-    # models = [Model1(), Model2(), Model3()]
-    # for m in models:
-    #     visualize_model(m, batch_size)
+    models = [Model1(), Model2(), Model3()]
+    for m in models:
+        visualize_model(m, batch_size)
+
+    #  Sanity check on model
+    for m in ["model1", "model2", "model3"]:
+        over_fit(m, batch_size, 10)
 
     # crazy_loop(title)
 
@@ -345,7 +395,7 @@ if __name__ == '__main__':
         # The best of model1:
         # model1	4	0.001	SGD	TRUE    80	58.8%
         ("model1", 0.001, SGD, True, 80),
-        # Example of memorizing the training data :( 100% acc on test set
+        # Example of memorizing the training data :( 100% acc on train set
         # model1	4	0.001	SGD	FALSE	80	55.6%
         ("model1", 0.001, SGD, False, 80),
         # The best of model 2
@@ -371,10 +421,9 @@ if __name__ == '__main__':
         optimizer = i[2]
         augmentation = i[3]
         num_epoch = i[4]
-        # try:
+
+        print(30 * "*")
         accuracy = run(model, batch_size, lr_rate, optimizer, augmentation, num_epoch)
-        # except:
-        #     accurancy = 0
 
         print(f"Test accuracy {accuracy}")
         data.append([model, batch_size, lr_rate, optimizer, augmentation, num_epoch, accuracy])
