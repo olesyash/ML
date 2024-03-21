@@ -41,7 +41,7 @@ test_transform = transforms.Compose([
 
 train_set = datasets.ImageFolder(os.path.join(PATH, "train"), transform=transform)
 
-test_set = datasets.ImageFolder(os.path.join(PATH, "train"), transform=test_transform)
+test_set = datasets.ImageFolder(os.path.join(PATH, "test"), transform=test_transform)
 
 weights = ResNet50_Weights.DEFAULT
 model = resnet50(weights=weights).to(device)
@@ -137,15 +137,14 @@ def test(batch_size=32, show=False):
     return epoch_acc
 
 
-def main():
+def crazy_loop(title):
     num_epochs = [2, 80, 100]
     lr_rates = [0.001, 0.0001]
     optimizers = [ADAM, SGD]
     augmentations = [True, False]
-    title = ["model", "batch_size", "learning_rate", "optimizer", "augmentation", "epochs", "accuracy"]
     data = []
     batch_size = 32
-    model = "Res50"
+
     for epoch in num_epochs:
         for lr_rate in lr_rates:
             for optimizer in optimizers:
@@ -174,6 +173,57 @@ def main():
                     end_time = timer()
                     print(f"Total time: {end_time - start_time:.3f} seconds")
                     data.append([model, batch_size, lr_rate, optimizer, augmentation, epoch, accuracy])
+
+    now = datetime.datetime.now()
+    dt_string = now.strftime("%d_%m_%Y_%H_%M")
+    df = pd.DataFrame(data, columns=title, dtype=str)
+    df.to_csv(f"res50_cats_and_dogs_{dt_string}.csv", index=False)
+
+
+def main():
+    title = ["model", "batch_size", "learning_rate", "optimizer", "augmentation", "epochs", "accuracy"]
+    data = []
+    batch_size = 32
+    model = "Res50"
+    # crazy_loop(title)
+
+    combinations = [
+        (10, 0.001, ADAM, True),
+        (20, 0.001, ADAM, True),
+        (40, 0.001, ADAM, True),
+        (80, 0.001, ADAM, True),
+        (80, 0.001, SGD, True),
+        (100, 0.001, SGD, True),
+        (120, 0.0001, SGD, True)
+    ]
+    for i in combinations:
+        epoch = i[0]
+        lr_rate = i[1]
+        optimizer = i[2]
+        augmentation = i[3]
+        print(f"Epoch: {epoch}, LR: {lr_rate}, Optimizer: {optimizer}, Augmentation: {augmentation}")
+        start_time = timer()
+        now = datetime.datetime.now()
+        dt_string = now.strftime("%d_%m_%Y_%H_%M")
+        print(dt_string)
+        fig_name = f"res50_loss_{dt_string}.png"
+        print(fig_name)
+        losses, accuracies = train(batch_size, epoch)
+        end_time = timer()
+        print("Finished training")
+        print(f"Total training time: {end_time - start_time:.3f} seconds")
+        print(losses)
+        plt.clf()
+        my_plot(np.linspace(1, epoch, epoch).astype(int), losses)
+        plt.savefig(fig_name)
+        plt.clf()
+        fig_name = f"res50_accuracy_{dt_string}.png"
+        my_plot(np.linspace(1, epoch, epoch).astype(int), accuracies)
+        plt.savefig(fig_name)
+        accuracy = test(32)
+        end_time = timer()
+        print(f"Total time: {end_time - start_time:.3f} seconds")
+        data.append([model, batch_size, lr_rate, optimizer, augmentation, epoch, accuracy])
 
     now = datetime.datetime.now()
     dt_string = now.strftime("%d_%m_%Y_%H_%M")

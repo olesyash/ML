@@ -297,6 +297,32 @@ def visualize_model(model, batch_size):
     summary(model, input_size=[batch_size, 3, IMAGE_WIDTH, IMAGE_HEIGHT])
 
 
+def crazy_loop(title):
+    data = []
+    now = datetime.datetime.now()
+    dt_string = now.strftime("%d_%m_%Y_%H_%M")
+    batch_size = 4
+    lr_rates = [0.001, 0.0001, 0.00001, 0.000001]
+    optimizers = [ADAM, SGD]
+    augmentations = [True]
+    models = ["model1", "model3", "model2"]
+    num_epochs = [11, 20, 40, 80]
+
+    for model in models:
+        for lr_rate in lr_rates:
+            for optimizer in optimizers:
+                for augmentation in augmentations:
+                    for num_epoch in num_epochs:
+                        try:
+                            accurancy = run(model, batch_size, lr_rate, optimizer, augmentation, num_epoch)
+                        except:
+                            accurancy = 0
+                        print(f"Test accurancy {accurancy}")
+                        data.append([model, batch_size, lr_rate, optimizer, augmentation, num_epoch, accurancy])
+    df = pd.DataFrame(data, columns=title, dtype=str)
+    df.to_csv(f"cnn_cats_and_dogs_{dt_string}.csv", index=False)
+
+
 if __name__ == '__main__':
     # Set random seeds
     start_time = timer()
@@ -308,34 +334,50 @@ if __name__ == '__main__':
     dt_string = now.strftime("%d_%m_%Y_%H_%M")
     title = ["model", "batch_size", "learning_rate", "optimizer", "augmentation", "epochs", "accurancy"]
     data = []
-    models = [Model1(), Model2(), Model3()]
+    # Visualize models
+    # models = [Model1(), Model2(), Model3()]
     # for m in models:
     #     visualize_model(m, batch_size)
 
-    models = ["model1", "model2", "model3"]
-    num_epochs = [40, 80]
-    lr_rates = [0.001, 0.0001]
-    optimizers = [ADAM, SGD]
-    augmentations = [True, False]
-    for model in models:
-        for lr_rate in lr_rates:
-            for optimizer in optimizers:
-                for augmentation in augmentations:
-                    for num_epoch in num_epochs:
-                        try:
-                            accurancy = run(model, batch_size, lr_rate, optimizer, augmentation, num_epoch)
-                        except:
-                            accurancy = 0
+    # crazy_loop(title)
 
-                        print(f"Test accuracy {accurancy}")
-                        data.append([model, batch_size, lr_rate, optimizer, augmentation, num_epoch, accurancy])
-    # And the winner is: !!!
-    # model = "model3"
-    # lr_rate = 0.001
-    # optimizer = ADAM
-    # augmentation = True
-    # num_epoch = 80
-    # accurancy = run(model, batch_size, lr_rate, optimizer, augmentation, num_epoch)
-    # data.append([model, batch_size, lr_rate, optimizer, augmentation, num_epoch, accurancy])
+    best_combinations = [
+        # The best of model1:
+        # model1	4	0.001	SGD	TRUE    80	58.8%
+        ("model1", 0.001, SGD, True, 80),
+        # Example of memorizing the training data :( 100% acc on test set
+        # model1	4	0.001	SGD	FALSE	80	55.6%
+        ("model1", 0.001, SGD, False, 80),
+        # The best of model 2
+        # model2	4	0.001   SCG	    TRUE	80	61.4%
+        ("model2", 0.001, SGD, True, 80),
+        # Same but with Adam optimizer, same results
+        # model2	4	0.001	Adam	TRUE	80	61.4%
+        ("model2", 0.001, ADAM, True, 80),
+        # Example of how augmentation improves, let's run without augmentation
+        # model2	4	0.001	Adam	FALSE	80	60.8%
+        ("model2", 0.001, ADAM, False, 80),
+        # I discovered model 3, I saw improvement, let's go nuts! 100 epochs!!
+        # 1000	3	4	0.0001	Adam	224	yes	100	59.60%
+        ("model3", 0.0001, ADAM, True, 80),
+        # The winner is:
+        # model3    4    0.0001    Adam    TRUE    80  62.4%
+        ("model3", 0.0001, ADAM, True, 80),
+
+    ]
+    for i in best_combinations:
+        model = i[0]
+        lr_rate = i[1]
+        optimizer = i[2]
+        augmentation = i[3]
+        num_epoch = i[4]
+        # try:
+        accuracy = run(model, batch_size, lr_rate, optimizer, augmentation, num_epoch)
+        # except:
+        #     accurancy = 0
+
+        print(f"Test accuracy {accuracy}")
+        data.append([model, batch_size, lr_rate, optimizer, augmentation, num_epoch, accuracy])
+
     df = pd.DataFrame(data, columns=title, dtype=str)
     df.to_csv(f"cnn_cats_and_dogs_{dt_string}.csv", index=False)
